@@ -159,14 +159,24 @@ class EmbedBuilder:
             lines = []
             if f.get("search_text"):
                 lines.append(f"🔍 `{f['search_text']}`")
+            if f.get("brand_titles") or f.get("brand_ids"):
+                label = f.get("brand_titles") or f.get("brand_ids")
+                lines.append(f"👟 Marque : **{label}**")
+            if f.get("catalog_titles") or f.get("catalog_ids"):
+                label = f.get("catalog_titles") or f.get("catalog_ids")
+                lines.append(f"🗂️  Catégorie : **{label}**")
+            if f.get("size_titles") or f.get("size_ids"):
+                label = f.get("size_titles") or f.get("size_ids")
+                lines.append(f"📏 Taille : **{label}**")
+            if f.get("condition_ids"):
+                from src.bot import CONDITION_LABELS
+                cids = f["condition_ids"].split(",")
+                labels = [CONDITION_LABELS.get(c, c) for c in cids]
+                lines.append(f"🏷️  État : {', '.join(labels)}")
             if f.get("min_price") is not None or f.get("max_price") is not None:
                 lo = f"{f['min_price']}€" if f.get("min_price") is not None else "0€"
                 hi = f"{f['max_price']}€" if f.get("max_price") is not None else "∞"
                 lines.append(f"💰 {lo} – {hi}")
-            if f.get("brand_ids"):
-                lines.append(f"👟 Marques IDs : `{f['brand_ids']}`")
-            if f.get("size_ids"):
-                lines.append(f"📏 Tailles IDs : `{f['size_ids']}`")
             lines.append(f"📢 <#{f['channel_id']}>")
             lines.append(f"🌐 {f['domain']}")
 
@@ -192,8 +202,9 @@ class EmbedBuilder:
         embed.add_field(
             name="/ajouter-filtre",
             value=(
-                "Crée une surveillance pour un mot-clé, une fourchette de prix, "
-                "sur le pays Vinted de votre choix."
+                "Crée une surveillance avec recherche guidée :\n"
+                "**marque** (autocomplete en temps réel), **catégorie**, "
+                "**taille**, **état**, **prix min/max**, **pays**."
             ),
             inline=False,
         )
