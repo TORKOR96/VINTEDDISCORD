@@ -8,6 +8,14 @@ from datetime import datetime
 # Couleur verte Vinted
 _VINTED_COLOR = discord.Color.from_rgb(9, 182, 109)
 
+_CONDITION_LABELS: dict[str, str] = {
+    "6": "🏷️ Neuf avec étiquettes",
+    "1": "✨ Neuf sans étiquettes",
+    "2": "👍 Très bon état",
+    "3": "👌 Bon état",
+    "4": "🙂 État satisfaisant",
+}
+
 _CURRENCY_SYMBOLS: dict[str, str] = {
     "EUR": "€",
     "GBP": "£",
@@ -169,10 +177,10 @@ class EmbedBuilder:
                 label = f.get("size_titles") or f.get("size_ids")
                 lines.append(f"📏 Taille : **{label}**")
             if f.get("condition_ids"):
-                from src.bot import CONDITION_LABELS
                 cids = f["condition_ids"].split(",")
-                labels = [CONDITION_LABELS.get(c, c) for c in cids]
-                lines.append(f"🏷️  État : {', '.join(labels)}")
+                labels = [_CONDITION_LABELS.get(c, c) for c in cids if c]
+                if labels:
+                    lines.append(f"🏷️  État : {', '.join(labels)}")
             if f.get("min_price") is not None or f.get("max_price") is not None:
                 lo = f"{f['min_price']}€" if f.get("min_price") is not None else "0€"
                 hi = f"{f['max_price']}€" if f.get("max_price") is not None else "∞"
@@ -200,11 +208,15 @@ class EmbedBuilder:
             color=_VINTED_COLOR,
         )
         embed.add_field(
-            name="/ajouter-filtre",
+            name="/ajouter-filtre `nom` `salon`",
             value=(
-                "Crée une surveillance avec recherche guidée :\n"
-                "**marque** (autocomplete en temps réel), **catégorie**, "
-                "**taille**, **état**, **prix min/max**, **pays**."
+                "Ouvre le menu de configuration guidé :\n"
+                "• **Pays** — dropdown (15 pays)\n"
+                "• **État(s)** — multi-sélection (neuf, très bon état…)\n"
+                "• **Taille(s)** — multi-sélection (S/M/L, 40, 42…)\n"
+                "• **Marque** — recherche en direct sur Vinted\n"
+                "• **Mots-clés & Prix** — formulaire libre\n"
+                "• **Catégorie** — menu Vinted complet"
             ),
             inline=False,
         )
