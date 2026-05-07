@@ -80,12 +80,36 @@ class VintedClient:
         hit = self._cache_get(key)
         if hit is not None:
             return hit
-        data = await self._sg_get(domain, f"https://{domain}/api/v2/brands",
-                                  {"search_text": query, "per_page": 25})
-        result = [{"id": b["id"], "title": b["title"]}
-                  for b in (data or {}).get("brands", []) if b.get("id")]
-        self._cache_set(key, result)
-        return result
+
+        # Vinted a changé le nom du paramètre selon les versions — on essaie les deux
+        for param_name in ("search_text", "q"):
+            data = await self._sg_get(
+                domain,
+                f"https://{domain}/api/v2/brands",
+                {param_name: query, "per_page": 25},
+            )
+            if data is None:
+                continue
+
+            # Le format de réponse peut varier : {"brands": [...]} ou liste directe
+            raw = data.get("brands") if isinstance(data, dict) else data
+            if not isinstance(raw, list):
+                continue
+
+            result = [
+                {"id": b["id"], "title": b["title"]}
+                for b in raw
+                if b.get("id") and b.get("title")
+            ]
+            if result:
+                self._cache_set(key, result)
+                return result
+
+        # Fallback : filtrer la liste statique de marques populaires
+        q = query.lower()
+        fallback = [b for b in _POPULAR_BRANDS if q in b["title"].lower()]
+        logger.warning(f"[brands] API échouée pour '{query}' — fallback {len(fallback)} résultats")
+        return fallback
 
     async def get_catalogs(self, domain: str = "www.vinted.fr") -> list[dict]:
         key = f"catalogs:{domain}"
@@ -158,7 +182,7 @@ class VintedClient:
             await state.session.close()
         session = aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(ssl=True, limit=4),
-            cookie_jar=aiohttp.CookieJar(),
+            cookie_jar=aiohttp.CookieJar(unsafe=True),
             headers={"User-Agent": random.choice(_USER_AGENTS)},
         )
         try:
@@ -172,43 +196,56 @@ class VintedClient:
         state.cookie_ts = now
 
     async def _ensure_sg_session(self, domain: str = "www.vinted.fr"):
-        """Session dédiée aux suggestions — courte durée de vie, pas de lock global."""
         now = time.monotonic()
         if self._sg_session and (now - self._sg_ts) < _COOKIE_TTL:
             return
         if self._sg_session:
             await self._sg_session.close()
+        # unsafe=True : accepte les cookies sans domaine strict (nécessaire pour Vinted)
         session = aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(ssl=True, limit=8),
-            cookie_jar=aiohttp.CookieJar(),
+            cookie_jar=aiohttp.CookieJar(unsafe=True),
             headers={"User-Agent": random.choice(_USER_AGENTS)},
         )
         try:
-            async with session.get(f"https://{domain}", headers=self._headers(),
-                                   allow_redirects=True,
-                                   timeout=aiohttp.ClientTimeout(total=10)) as r:
-                logger.info(f"Session suggestion initialisée ({r.status})")
+            async with session.get(
+                f"https://{domain}",
+                headers=self._headers(),
+                allow_redirects=True,
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as r:
+                logger.info(f"Session suggestion initialisée ({r.status}), "
+                            f"cookies: {list(session.cookie_jar)!r:.120}")
         except Exception as e:
             logger.warning(f"Init session suggestion : {e}")
         self._sg_session = session
         self._sg_ts = now
 
     async def _sg_get(self, domain: str, url: str, params: dict) -> Optional[dict]:
-        """GET rapide pour l'UI — timeout 5s."""
+        """GET pour l'UI interactive — timeout 10s, logs d'erreur visibles."""
         if not self._sg_session or (time.monotonic() - self._sg_ts) >= _COOKIE_TTL:
             await self._ensure_sg_session(domain)
         async with self._sg_lock:
             try:
                 async with self._sg_session.get(
-                    url, params=params,
-                    headers={**self._headers(), "Referer": f"https://{domain}/"},
-                    timeout=aiohttp.ClientTimeout(total=5),
+                    url,
+                    params=params,
+                    headers={
+                        **self._headers(),
+                        "Referer": f"https://{domain}/",
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=10),
                 ) as r:
                     if r.status == 200:
                         return await r.json(content_type=None)
-                    logger.debug(f"[sg] {url} → {r.status}")
+                    # Log WARNING (visible dans docker logs) pour diagnostiquer
+                    body = await r.text()
+                    logger.warning(f"[sg] {url} → HTTP {r.status} | {body[:200]}")
+            except asyncio.TimeoutError:
+                logger.warning(f"[sg] Timeout sur {url}")
             except Exception as e:
-                logger.debug(f"[sg] {e}")
+                logger.warning(f"[sg] Erreur {url} : {e}")
         return None
 
     async def _do_search(self, domain: str, state: _DomainState,
@@ -259,7 +296,58 @@ class VintedClient:
         self._cache[key] = (time.monotonic(), val)
 
 
-# ── Fallbacks ─────────────────────────────────────────────────────────────────
+# ── Fallbacks & données statiques ────────────────────────────────────────────
+
+# Marques populaires — utilisées si l'API Vinted brands ne répond pas
+_POPULAR_BRANDS = [
+    {"id": 53,   "title": "Nike"},
+    {"id": 12,   "title": "Adidas"},
+    {"id": 308,  "title": "Zara"},
+    {"id": 536,  "title": "H&M"},
+    {"id": 304,  "title": "Levi's"},
+    {"id": 3,    "title": "Ralph Lauren"},
+    {"id": 213,  "title": "Tommy Hilfiger"},
+    {"id": 362,  "title": "The North Face"},
+    {"id": 19,   "title": "Lacoste"},
+    {"id": 376,  "title": "Stone Island"},
+    {"id": 52,   "title": "New Balance"},
+    {"id": 77,   "title": "Puma"},
+    {"id": 280,  "title": "Vans"},
+    {"id": 161,  "title": "Converse"},
+    {"id": 586,  "title": "Jordan"},
+    {"id": 473,  "title": "Supreme"},
+    {"id": 316,  "title": "Mango"},
+    {"id": 439,  "title": "Pull&Bear"},
+    {"id": 16,   "title": "Bershka"},
+    {"id": 441,  "title": "Stradivarius"},
+    {"id": 362,  "title": "Hollister"},
+    {"id": 215,  "title": "Calvin Klein"},
+    {"id": 148,  "title": "Hugo Boss"},
+    {"id": 267,  "title": "Guess"},
+    {"id": 371,  "title": "Lululemon"},
+    {"id": 64,   "title": "Under Armour"},
+    {"id": 258,  "title": "Patagonia"},
+    {"id": 88,   "title": "Columbia"},
+    {"id": 374,  "title": "Timberland"},
+    {"id": 195,  "title": "Dr. Martens"},
+    {"id": 9,    "title": "Gucci"},
+    {"id": 7,    "title": "Louis Vuitton"},
+    {"id": 10,   "title": "Chanel"},
+    {"id": 11,   "title": "Dior"},
+    {"id": 237,  "title": "Balenciaga"},
+    {"id": 468,  "title": "Off-White"},
+    {"id": 2,    "title": "Burberry"},
+    {"id": 5,    "title": "Prada"},
+    {"id": 6,    "title": "Versace"},
+    {"id": 4,    "title": "Armani"},
+    {"id": 17,   "title": "Massimo Dutti"},
+    {"id": 338,  "title": "Sandro"},
+    {"id": 424,  "title": "Maje"},
+    {"id": 443,  "title": "Ba&sh"},
+    {"id": 178,  "title": "A.P.C."},
+    {"id": 101,  "title": "Kenzo"},
+    {"id": 103,  "title": "Isabel Marant"},
+]
 
 _FALLBACK_CATALOGS = [
     {"id": 1904, "title": "Femmes — Vêtements"},
