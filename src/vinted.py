@@ -105,10 +105,12 @@ class VintedClient:
                 self._cache_set(key, result)
                 return result
 
-        # Fallback : filtrer la liste statique de marques populaires
+        # Fallback : filtrer la liste statique de marques populaires.
+        # Ces marques ont id=0 pour signaler qu'on n'a pas d'ID Vinted fiable :
+        # le monitor utilisera le nom dans search_text plutôt que brand_ids[].
         q = query.lower()
         fallback = [b for b in _POPULAR_BRANDS if q in b["title"].lower()]
-        logger.warning(f"[brands] API échouée pour '{query}' — fallback {len(fallback)} résultats")
+        logger.warning(f"[brands] API échouée pour '{query}' — {len(fallback)} résultats en fallback texte")
         return fallback
 
     async def get_catalogs(self, domain: str = "www.vinted.fr") -> list[dict]:
@@ -298,55 +300,61 @@ class VintedClient:
 
 # ── Fallbacks & données statiques ────────────────────────────────────────────
 
-# Marques populaires — utilisées si l'API Vinted brands ne répond pas
+# Marques populaires — fallback si l'API Vinted brands est injoignable.
+# id=0 → pas d'ID Vinted fiable → le monitor ajoutera le titre à search_text.
 _POPULAR_BRANDS = [
-    {"id": 53,   "title": "Nike"},
-    {"id": 12,   "title": "Adidas"},
-    {"id": 308,  "title": "Zara"},
-    {"id": 536,  "title": "H&M"},
-    {"id": 304,  "title": "Levi's"},
-    {"id": 3,    "title": "Ralph Lauren"},
-    {"id": 213,  "title": "Tommy Hilfiger"},
-    {"id": 362,  "title": "The North Face"},
-    {"id": 19,   "title": "Lacoste"},
-    {"id": 376,  "title": "Stone Island"},
-    {"id": 52,   "title": "New Balance"},
-    {"id": 77,   "title": "Puma"},
-    {"id": 280,  "title": "Vans"},
-    {"id": 161,  "title": "Converse"},
-    {"id": 586,  "title": "Jordan"},
-    {"id": 473,  "title": "Supreme"},
-    {"id": 316,  "title": "Mango"},
-    {"id": 439,  "title": "Pull&Bear"},
-    {"id": 16,   "title": "Bershka"},
-    {"id": 441,  "title": "Stradivarius"},
-    {"id": 362,  "title": "Hollister"},
-    {"id": 215,  "title": "Calvin Klein"},
-    {"id": 148,  "title": "Hugo Boss"},
-    {"id": 267,  "title": "Guess"},
-    {"id": 371,  "title": "Lululemon"},
-    {"id": 64,   "title": "Under Armour"},
-    {"id": 258,  "title": "Patagonia"},
-    {"id": 88,   "title": "Columbia"},
-    {"id": 374,  "title": "Timberland"},
-    {"id": 195,  "title": "Dr. Martens"},
-    {"id": 9,    "title": "Gucci"},
-    {"id": 7,    "title": "Louis Vuitton"},
-    {"id": 10,   "title": "Chanel"},
-    {"id": 11,   "title": "Dior"},
-    {"id": 237,  "title": "Balenciaga"},
-    {"id": 468,  "title": "Off-White"},
-    {"id": 2,    "title": "Burberry"},
-    {"id": 5,    "title": "Prada"},
-    {"id": 6,    "title": "Versace"},
-    {"id": 4,    "title": "Armani"},
-    {"id": 17,   "title": "Massimo Dutti"},
-    {"id": 338,  "title": "Sandro"},
-    {"id": 424,  "title": "Maje"},
-    {"id": 443,  "title": "Ba&sh"},
-    {"id": 178,  "title": "A.P.C."},
-    {"id": 101,  "title": "Kenzo"},
-    {"id": 103,  "title": "Isabel Marant"},
+    {"id": 0, "title": "Nike"},
+    {"id": 0, "title": "Adidas"},
+    {"id": 0, "title": "Zara"},
+    {"id": 0, "title": "H&M"},
+    {"id": 0, "title": "Levi's"},
+    {"id": 0, "title": "Ralph Lauren"},
+    {"id": 0, "title": "Tommy Hilfiger"},
+    {"id": 0, "title": "The North Face"},
+    {"id": 0, "title": "Lacoste"},
+    {"id": 0, "title": "Stone Island"},
+    {"id": 0, "title": "New Balance"},
+    {"id": 0, "title": "Puma"},
+    {"id": 0, "title": "Vans"},
+    {"id": 0, "title": "Converse"},
+    {"id": 0, "title": "Jordan"},
+    {"id": 0, "title": "Supreme"},
+    {"id": 0, "title": "Mango"},
+    {"id": 0, "title": "Pull&Bear"},
+    {"id": 0, "title": "Bershka"},
+    {"id": 0, "title": "Stradivarius"},
+    {"id": 0, "title": "Hollister"},
+    {"id": 0, "title": "Calvin Klein"},
+    {"id": 0, "title": "Hugo Boss"},
+    {"id": 0, "title": "Guess"},
+    {"id": 0, "title": "Lululemon"},
+    {"id": 0, "title": "Under Armour"},
+    {"id": 0, "title": "Patagonia"},
+    {"id": 0, "title": "Columbia"},
+    {"id": 0, "title": "Timberland"},
+    {"id": 0, "title": "Dr. Martens"},
+    {"id": 0, "title": "Gucci"},
+    {"id": 0, "title": "Louis Vuitton"},
+    {"id": 0, "title": "Chanel"},
+    {"id": 0, "title": "Dior"},
+    {"id": 0, "title": "Balenciaga"},
+    {"id": 0, "title": "Off-White"},
+    {"id": 0, "title": "Burberry"},
+    {"id": 0, "title": "Prada"},
+    {"id": 0, "title": "Versace"},
+    {"id": 0, "title": "Armani"},
+    {"id": 0, "title": "Massimo Dutti"},
+    {"id": 0, "title": "Sandro"},
+    {"id": 0, "title": "Maje"},
+    {"id": 0, "title": "Ba&sh"},
+    {"id": 0, "title": "A.P.C."},
+    {"id": 0, "title": "Kenzo"},
+    {"id": 0, "title": "Isabel Marant"},
+    {"id": 0, "title": "Carhartt"},
+    {"id": 0, "title": "Dickies"},
+    {"id": 0, "title": "Napapijri"},
+    {"id": 0, "title": "Arc'teryx"},
+    {"id": 0, "title": "Salomon"},
 ]
 
 _FALLBACK_CATALOGS = [

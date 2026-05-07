@@ -400,7 +400,9 @@ class _BrandSelect(discord.ui.Select):
             self._state.brand_title = ""
         elif "|" in raw:
             bid, btitle = raw.split("|", 1)
-            self._state.brand_id = bid
+            # id=0 → marque issue du fallback, pas d'ID Vinted fiable
+            # Le monitor ajoutera le nom à search_text (même résultat que la barre de recherche Vinted)
+            self._state.brand_id = bid if bid != "0" else ""
             self._state.brand_title = btitle
         await interaction.response.edit_message(
             embed=self._state.summary_embed(), view=self._parent

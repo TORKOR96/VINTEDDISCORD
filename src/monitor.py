@@ -174,14 +174,26 @@ def _build_params(f: dict) -> dict:
     """Construit le dict de paramètres pour l'API Vinted à partir d'un filtre."""
     params: dict = {}
 
+    # Mots-clés de base
+    search_parts: list[str] = []
     if f.get("search_text"):
-        params["search_text"] = f["search_text"]
+        search_parts.append(f["search_text"])
+
+    # Marque : si on a un vrai ID Vinted → paramètre brand_ids[] (filtrage exact)
+    # Sinon si on a juste le nom (fallback) → on l'ajoute au search_text
+    if f.get("brand_ids"):
+        params["brand_ids[]"] = f["brand_ids"].split(",")
+    elif f.get("brand_titles"):
+        # Même comportement que la barre de recherche Vinted
+        search_parts.append(f["brand_titles"])
+
+    if search_parts:
+        params["search_text"] = " ".join(search_parts)
+
     if f.get("min_price") is not None:
         params["price_from"] = f["min_price"]
     if f.get("max_price") is not None:
         params["price_to"] = f["max_price"]
-    if f.get("brand_ids"):
-        params["brand_ids[]"] = f["brand_ids"].split(",")
     if f.get("size_ids"):
         params["size_ids[]"] = f["size_ids"].split(",")
     if f.get("catalog_ids"):
